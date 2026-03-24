@@ -30,7 +30,7 @@ scrape_configs:
 ## Configuration fields
 
 <ParamField path="server.http_listen_port" type="number" default="9080">
-  The port Promtail's own HTTP server listens on. You can use this endpoint to check Promtail's health and inspect its targets at `http://localhost:9080`.
+  The port Promtail's HTTP server listens on inside the container. Because `docker-compose.yml` does not expose this port to the host, `http://localhost:9080` is not accessible from your browser. The endpoint is reachable from other containers on the same Docker network, for example for health checks from within the stack.
 </ParamField>
 
 <ParamField path="positions.filename" type="string" default="/tmp/positions.yaml">

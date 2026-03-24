@@ -20,7 +20,7 @@ description: "Diagnose and fix common issues with the PLG observability stack."
 
     **Common causes:**
 
-    - **Port already in use.** If the log contains `bind: address already in use`, another process on your host is occupying the same port. See the [Port already in use](#) accordion below for steps to resolve this.
+    - **Port already in use.** If the log contains `bind: address already in use`, another process on your host is occupying the same port. See the **Port already in use** accordion below for steps to resolve this.
 
     - **Config file syntax error.** Prometheus, Loki, and Promtail all mount their config files as volumes. A YAML syntax error in any of these files prevents the container from initialising. Check `prometheus/prometheus.yml`, `loki/loki-config.yml`, or `promtail/promtail-config.yml` for incorrect indentation or invalid values, then run:
 

@@ -43,10 +43,10 @@ Once the stack is running, each service is reachable on your host machine at the
 | Prometheus UI | http://localhost:9090 | `9090` |
 | Node Exporter metrics | http://localhost:9100/metrics | `9100` |
 | Loki API | http://localhost:3100 | `3100` |
-| Promtail | http://localhost:9080 | `9080` |
+| Promtail | not exposed to host | `9080` |
 
 <Note>
-  When configuring datasources inside Grafana, use the container name as the hostname — for example, `http://prometheus:9090` and `http://loki:3100` — not `localhost`. Grafana resolves these names over the internal Docker network.
+  Promtail does not expose a host port in `docker-compose.yml`, so port `9080` is only reachable from other containers on the Docker network. When configuring datasources inside Grafana, use container-name URLs — for example, `http://prometheus:9090` and `http://loki:3100` — not `localhost`, since Grafana resolves these names over the internal Docker network.
 </Note>
 
 ## Viewing service logs

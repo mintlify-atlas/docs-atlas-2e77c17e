@@ -19,7 +19,7 @@ Metrics travel in **pull** mode: Prometheus scrapes Node Exporter on a 15-second
 
 ## Services
 
-<Columns cols={2}>
+<CardGroup cols={2}>
   <Card title="Prometheus" icon="chart-line">
     Collects and stores metrics. Scrapes Node Exporter every 15 seconds using the static target `node-exporter:9100`. Configuration is mounted from `./prometheus/prometheus.yml`.
 
@@ -38,19 +38,19 @@ Metrics travel in **pull** mode: Prometheus scrapes Node Exporter on a 15-second
     **Image:** `grafana/loki:latest`
     **Port:** `3100`
   </Card>
-  <Card title="Promtail" icon="file-text">
+  <Card title="Promtail" icon="file-lines">
     Tails log files and pushes them to Loki. The host's `/var/log` directory is bind-mounted read-only, and the Promtail config is mounted from `./promtail/promtail-config.yml`.
 
     **Image:** `grafana/promtail:latest`
-    **Port:** none exposed
+    **Port:** none exposed to host
   </Card>
-  <Card title="Grafana" icon="layout-dashboard">
+  <Card title="Grafana" icon="chart-bar">
     Visualises metrics from Prometheus and logs from Loki in a unified dashboard. The admin password is set via the `GF_SECURITY_ADMIN_PASSWORD` environment variable.
 
     **Image:** `grafana/grafana:latest`
     **Port:** `3000`
   </Card>
-</Columns>
+</CardGroup>
 
 ## Port mapping
 
@@ -60,10 +60,10 @@ Metrics travel in **pull** mode: Prometheus scrapes Node Exporter on a 15-second
 | Loki          | 3100          | 3100      | HTTP     |
 | Prometheus    | 9090          | 9090      | HTTP     |
 | Node Exporter | 9100          | 9100      | HTTP     |
-| Promtail      | 9080          | —         | HTTP     |
+| Promtail      | 9080          | not mapped | HTTP    |
 
 <Note>
-  Promtail listens on port 9080 internally (its `server.http_listen_port`) but does not expose that port to the host. You only need host access to Grafana at port 3000 for day-to-day use.
+  Promtail's HTTP server listens on container port `9080` (set by `server.http_listen_port` in `promtail-config.yml`) but no host port mapping is defined in `docker-compose.yml`. Port `9080` is only reachable from other containers on the Docker network — not from your host browser.
 </Note>
 
 ## Prometheus scrape configuration

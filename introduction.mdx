@@ -17,7 +17,7 @@ All five services run locally in Docker containers with a single command.
     Understand how all five services connect
   </Card>
   <Card title="PromQL queries" icon="chart-line" href="/querying/promql">
-    Query CPU, RAM, and disk metrics with Prometheus
+    Query CPU and RAM metrics with Prometheus
   </Card>
   <Card title="LogQL queries" icon="file-lines" href="/querying/logql">
     Filter and search system logs with Loki
@@ -26,12 +26,12 @@ All five services run locally in Docker containers with a single command.
 
 ## The PLG stack
 
-| Service | Role | Port |
+| Service | Role | Host port |
 |---|---|---|
 | **Prometheus** | Scrapes and stores metrics | `9090` |
 | **Node Exporter** | Exposes system metrics (CPU, RAM, disk) | `9100` |
 | **Loki** | Stores and indexes log streams | `3100` |
-| **Promtail** | Collects logs and pushes to Loki | `9080` |
+| **Promtail** | Collects logs and pushes to Loki | not mapped |
 | **Grafana** | Unified dashboard for metrics and logs | `3000` |
 
 ## Key concepts
