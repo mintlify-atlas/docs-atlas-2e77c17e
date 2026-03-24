@@ -1,0 +1,57 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "Monitoring Lab — PLG Stack",
+  "projectDescription": "A local observability stack using Prometheus, Loki, and Grafana (PLG pattern) to monitor system metrics and collect logs, all visualized in a unified Grafana dashboard.",
+  "theme": "aspen",
+  "primaryColor": "#F46800",
+  "lightColor": "#FFF3E8",
+  "darkColor": "#1A0F00",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["introduction", "architecture"]
+          },
+          {
+            "group": "Setup",
+            "pages": ["setup/prerequisites", "setup/quickstart"]
+          },
+          {
+            "group": "Configuration",
+            "pages": ["configuration/prometheus", "configuration/loki", "configuration/promtail", "configuration/grafana"]
+          },
+          {
+            "group": "Querying",
+            "pages": ["querying/promql", "querying/logql"]
+          },
+          {
+            "group": "Operations",
+            "pages": ["operations/managing-stack", "operations/troubleshooting"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Docker Compose-based one-command deployment",
+    "Prometheus metrics collection with Node Exporter",
+    "Loki log aggregation with filesystem storage",
+    "Promtail log collection from /var/log",
+    "Grafana unified dashboard for metrics and logs",
+    "PromQL and LogQL query examples",
+    "Fully local — no cloud dependencies"
+  ],
+  "publicApiSurface": [
+    "Prometheus HTTP API — http://localhost:9090",
+    "Node Exporter metrics endpoint — http://localhost:9100",
+    "Loki push API — http://loki:3100/loki/api/v1/push",
+    "Promtail server — http://localhost:9080",
+    "Grafana dashboard — http://localhost:3000",
+    "docker compose up -d",
+    "docker compose ps",
+    "docker compose down"
+  ]
+}
