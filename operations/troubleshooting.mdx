@@ -1,0 +1,231 @@
+---
+title: "Troubleshooting"
+description: "Diagnose and fix common issues with the PLG observability stack."
+---
+
+<Tip>
+  Start every investigation with `docker compose logs <service>`. Most problems leave a clear error message in the container output that points directly to the cause.
+</Tip>
+
+<AccordionGroup>
+
+  <Accordion title="A container won't start">
+    Check the logs of the failing container first:
+
+    ```bash
+    docker compose logs <service>
+    ```
+
+    Replace `<service>` with the container name shown as `Exited` in `docker compose ps` — for example, `prometheus`, `loki`, `promtail`, `node-exporter`, or `grafana`.
+
+    **Common causes:**
+
+    - **Port already in use.** If the log contains `bind: address already in use`, another process on your host is occupying the same port. See the [Port already in use](#) accordion below for steps to resolve this.
+
+    - **Config file syntax error.** Prometheus, Loki, and Promtail all mount their config files as volumes. A YAML syntax error in any of these files prevents the container from initialising. Check `prometheus/prometheus.yml`, `loki/loki-config.yml`, or `promtail/promtail-config.yml` for incorrect indentation or invalid values, then run:
+
+      ```bash
+      docker compose up -d --force-recreate <service>
+      ```
+
+    - **Volume path issue.** If Docker cannot find a file at the path specified in the `volumes:` section of `docker-compose.yml`, the container exits immediately. Confirm that `prometheus/prometheus.yml`, `loki/loki-config.yml`, and `promtail/promtail-config.yml` all exist relative to the directory where you run `docker compose`.
+  </Accordion>
+
+  <Accordion title="Grafana can't connect to Prometheus">
+    **Symptom:** The Prometheus datasource in Grafana shows a connection error when you click **Save & test**.
+
+    **Diagnosis:**
+
+    1. Confirm Prometheus is running:
+
+       ```bash
+       docker compose ps
+       ```
+
+       The `prometheus` container should show status `Up`.
+
+    2. Check Prometheus logs for startup errors:
+
+       ```bash
+       docker compose logs prometheus
+       ```
+
+    **Fix:**
+
+    Verify that the datasource URL in Grafana is set to `http://prometheus:9090`, not `http://localhost:9090`.
+
+    Grafana runs inside Docker and resolves service names over the internal Docker network. Using `localhost` inside the container refers to the Grafana container itself, not your host machine, so the connection will always fail. The correct URL uses the Docker service name `prometheus` as the hostname.
+
+    Go to **Connections → Data sources**, select your Prometheus datasource, update the URL to `http://prometheus:9090`, and click **Save & test**.
+  </Accordion>
+
+  <Accordion title="Grafana can't connect to Loki">
+    **Symptom:** The Loki datasource in Grafana shows a connection error, or log queries return no data.
+
+    **Diagnosis:**
+
+    1. Confirm Loki is running:
+
+       ```bash
+       docker compose ps
+       ```
+
+       The `loki` container should show status `Up`.
+
+    2. Check Loki logs for errors:
+
+       ```bash
+       docker compose logs loki
+       ```
+
+    3. Confirm Loki is listening on port `3100` by checking its config:
+
+       ```yaml
+       # loki/loki-config.yml
+       server:
+         http_listen_port: 3100
+       ```
+
+    **Fix:**
+
+    The datasource URL in Grafana must be `http://loki:3100`, not `http://localhost:3100`. Like Prometheus, Grafana resolves `loki` as a hostname over the internal Docker network.
+
+    Go to **Connections → Data sources**, select your Loki datasource, update the URL to `http://loki:3100`, and click **Save & test**.
+  </Accordion>
+
+  <Accordion title="No logs in Loki / Promtail not collecting">
+    **Symptom:** Loki datasource connects successfully in Grafana, but log queries such as `{job="varlogs"}` return no results.
+
+    **Diagnosis:**
+
+    1. Check Promtail logs for collection errors:
+
+       ```bash
+       docker compose logs promtail
+       ```
+
+       Look for messages about file discovery or push failures.
+
+    2. Confirm the `/var/log` volume is mounted correctly in `docker-compose.yml`:
+
+       ```yaml
+       promtail:
+         volumes:
+           - ./promtail/promtail-config.yml:/etc/promtail/config.yml
+           - /var/log:/var/log:ro
+       ```
+
+       If the `/var/log:/var/log:ro` line is missing or the path is wrong, Promtail has nothing to read.
+
+    3. Verify the scrape path in `promtail/promtail-config.yml`:
+
+       ```yaml
+       scrape_configs:
+         - job_name: system
+           static_configs:
+             - targets:
+                 - localhost
+               labels:
+                 job: varlogs
+                 __path__: /var/log/*.log
+       ```
+
+       The `__path__` label must match files that actually exist inside the container at `/var/log/*.log`. If your host system stores logs elsewhere, update the volume mount and `__path__` to match.
+
+    4. Confirm Promtail can reach Loki. Its push URL is configured as:
+
+       ```yaml
+       clients:
+         - url: http://loki:3100/loki/api/v1/push
+       ```
+
+       If Loki is not running or the URL is wrong, Promtail will log push errors.
+
+    **Fix:** Correct any of the issues found above, then restart Promtail to apply the changes:
+
+    ```bash
+    docker compose up -d --force-recreate promtail
+    ```
+  </Accordion>
+
+  <Accordion title="Prometheus not scraping Node Exporter">
+    **Symptom:** Metrics like `node_cpu_seconds_total` are missing from Prometheus, or the `node-exporter` target shows as `DOWN` on the Prometheus targets page.
+
+    **Diagnosis:**
+
+    1. Open the Prometheus targets page at [http://localhost:9090/targets](http://localhost:9090/targets) and check the status of the `node-exporter` job.
+
+    2. Check Node Exporter logs:
+
+       ```bash
+       docker compose logs node-exporter
+       ```
+
+    3. Confirm the scrape target in `prometheus/prometheus.yml` is set to `node-exporter:9100`:
+
+       ```yaml
+       scrape_configs:
+         - job_name: 'node-exporter'
+           static_configs:
+             - targets: ['node-exporter:9100']
+       ```
+
+       Prometheus resolves `node-exporter` as a hostname over the internal Docker network. If this is set to `localhost:9100`, scraping will fail because `localhost` inside the Prometheus container refers to the Prometheus container itself.
+
+    4. Confirm Node Exporter is running:
+
+       ```bash
+       docker compose ps
+       ```
+
+    **Fix:** If `prometheus.yml` is incorrect, update it to use `node-exporter:9100` as the target, then force-recreate Prometheus to pick up the change:
+
+    ```bash
+    docker compose up -d --force-recreate prometheus
+    ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    **Symptom:** A container exits immediately and `docker compose logs <service>` contains `bind: address already in use`.
+
+    **Diagnosis:**
+
+    Identify which process is occupying the port. For example, to check port `9090`:
+
+    ```bash
+    sudo ss -tlnp | grep 9090
+    ```
+
+    The ports used by each service are:
+
+    | Service | Host port |
+    |---|---|
+    | Grafana | `3000` |
+    | Loki | `3100` |
+    | Prometheus | `9090` |
+    | Node Exporter | `9100` |
+
+    **Fix:**
+
+    You have two options:
+
+    - **Stop the conflicting process** and run `docker compose up -d` again.
+
+    - **Change the host port** for the affected service in `docker-compose.yml`. The format is `"<host-port>:<container-port>"`. For example, to move Prometheus to host port `19090`:
+
+      ```yaml
+      prometheus:
+        ports:
+          - "19090:9090"
+      ```
+
+      After editing, recreate the container:
+
+      ```bash
+      docker compose up -d --force-recreate prometheus
+      ```
+
+      Remember to update any URLs that reference the old port — such as the Prometheus datasource URL in Grafana or the link you use to open the Prometheus UI.
+  </Accordion>
+
+</AccordionGroup>

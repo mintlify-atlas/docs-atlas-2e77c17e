@@ -1,0 +1,171 @@
+---
+title: "Architecture"
+description: "How Prometheus, Node Exporter, Loki, Promtail, and Grafana connect in the PLG stack."
+---
+
+The PLG stack runs five services in Docker. **Prometheus** and **Node Exporter** handle metrics; **Loki** and **Promtail** handle logs; **Grafana** unifies both in a single dashboard. Services discover each other by container name on Docker's default bridge network — no external DNS required.
+
+## Data flow
+
+```
+Node Exporter ──► Prometheus ──► Grafana
+  (metrics)        (storage)    (dashboards)
+                                    ▲
+Promtail ────────► Loki ───────────┘
+  (collect)        (storage)
+```
+
+Metrics travel in **pull** mode: Prometheus scrapes Node Exporter on a 15-second interval. Logs travel in **push** mode: Promtail tails `/var/log/*.log` and forwards each entry to Loki over HTTP.
+
+## Services
+
+<Columns cols={2}>
+  <Card title="Prometheus" icon="chart-line">
+    Collects and stores metrics. Scrapes Node Exporter every 15 seconds using the static target `node-exporter:9100`. Configuration is mounted from `./prometheus/prometheus.yml`.
+
+    **Image:** `prom/prometheus:latest`
+    **Port:** `9090`
+  </Card>
+  <Card title="Node Exporter" icon="server">
+    Exposes host system metrics — CPU, RAM, disk, and network — as a Prometheus-compatible HTTP endpoint. No volume mounts required; it reads directly from the host's `/proc` and `/sys` filesystems.
+
+    **Image:** `prom/node-exporter:latest`
+    **Port:** `9100`
+  </Card>
+  <Card title="Loki" icon="database">
+    Stores log streams indexed by label. Runs in single-binary mode with filesystem storage. Configuration is mounted from `./loki/loki-config.yml`.
+
+    **Image:** `grafana/loki:latest`
+    **Port:** `3100`
+  </Card>
+  <Card title="Promtail" icon="file-text">
+    Tails log files and pushes them to Loki. The host's `/var/log` directory is bind-mounted read-only, and the Promtail config is mounted from `./promtail/promtail-config.yml`.
+
+    **Image:** `grafana/promtail:latest`
+    **Port:** none exposed
+  </Card>
+  <Card title="Grafana" icon="layout-dashboard">
+    Visualises metrics from Prometheus and logs from Loki in a unified dashboard. The admin password is set via the `GF_SECURITY_ADMIN_PASSWORD` environment variable.
+
+    **Image:** `grafana/grafana:latest`
+    **Port:** `3000`
+  </Card>
+</Columns>
+
+## Port mapping
+
+| Service       | Container port | Host port | Protocol |
+|---------------|---------------|-----------|----------|
+| Grafana       | 3000          | 3000      | HTTP     |
+| Loki          | 3100          | 3100      | HTTP     |
+| Prometheus    | 9090          | 9090      | HTTP     |
+| Node Exporter | 9100          | 9100      | HTTP     |
+| Promtail      | 9080          | —         | HTTP     |
+
+<Note>
+  Promtail listens on port 9080 internally (its `server.http_listen_port`) but does not expose that port to the host. You only need host access to Grafana at port 3000 for day-to-day use.
+</Note>
+
+## Prometheus scrape configuration
+
+Prometheus is configured with a global `scrape_interval` of **15s**. It has one scrape job, `node-exporter`, targeting Node Exporter by container name:
+
+```yaml prometheus/prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+```
+
+Because both containers share the same Docker network, the hostname `node-exporter` resolves to the Node Exporter container's IP automatically. You do not need to hard-code any IP address.
+
+## Promtail log collection
+
+Promtail reads every file matching `/var/log/*.log` and labels each log stream with `job="varlogs"`. It tracks read positions in `/tmp/positions.yaml` so that restarts do not re-send already-processed lines.
+
+```yaml promtail/promtail-config.yml
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          __path__: /var/log/*.log
+```
+
+The `clients` entry uses the container name `loki` as the hostname. Promtail pushes to Loki's ingest endpoint at `http://loki:3100/loki/api/v1/push`.
+
+<Info>
+  The host's `/var/log` directory is mounted into the Promtail container at `/var/log` as read-only (`ro`). Promtail can read log files but cannot write to or delete them.
+</Info>
+
+## Loki storage configuration
+
+Loki runs without authentication (`auth_enabled: false`) and stores data on the local filesystem under the `/loki` path prefix. Chunks and index rules are kept in separate subdirectories:
+
+```yaml loki/loki-config.yml
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+```
+
+Key storage details:
+
+- **Schema version:** v13 with TSDB store, active from `2020-10-24`.
+- **Object store:** `filesystem` — data lives inside the container at `/loki/chunks`.
+- **Index:** prefix `index_`, rotated every 24 hours.
+- **Replication factor:** 1 (single node, no replication).
+- **Ring coordination:** in-memory KV store bound to `127.0.0.1`, suitable for single-instance deployments.
+
+<Warning>
+  Because Loki uses in-container filesystem storage with no named volume defined in `docker-compose.yml`, all stored logs are lost when you run `docker compose down`. Add a named volume for `/loki` if you need data to persist across restarts.
+</Warning>
+
+## Network connectivity
+
+All five containers communicate using Docker's default bridge network. Services reference each other by container name:
+
+| Connection         | URL used                                   |
+|--------------------|--------------------------------------------|
+| Prometheus → Node Exporter | `http://node-exporter:9100/metrics` |
+| Promtail → Loki    | `http://loki:3100/loki/api/v1/push`        |
+| Grafana → Prometheus | `http://prometheus:9090`                 |
+| Grafana → Loki     | `http://loki:3100`                         |
+
+When you add data sources in Grafana (**Connections → Data sources → Add new data source**), use these container-name URLs rather than `localhost`.

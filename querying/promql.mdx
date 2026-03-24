@@ -1,0 +1,93 @@
+---
+title: "PromQL — metrics queries"
+description: "Query CPU, memory, and system metrics from Node Exporter using PromQL."
+---
+
+PromQL (Prometheus Query Language) is the query language built into Prometheus. You use it to select, filter, and aggregate time-series metrics. In this project, Node Exporter exposes system metrics that Prometheus scrapes every 15 seconds.
+
+You can run PromQL queries in two places:
+
+- **Prometheus UI** at `http://localhost:9090` — use the "Graph" tab for ad-hoc exploration.
+- **Grafana Explore** — go to Explore, select the Prometheus datasource, and type your query.
+
+## Example queries
+
+<Tabs>
+  <Tab title="CPU">
+    ```promql
+    100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)
+    ```
+
+    This query calculates the percentage of CPU time spent doing actual work (not idle). Here is what each part does:
+
+    - `node_cpu_seconds_total{mode="idle"}` — selects the `node_cpu_seconds_total` metric and filters it to only the `idle` mode using a label selector. Node Exporter reports CPU time broken down by mode (idle, user, system, etc.).
+    - `rate(...[1m])` — computes the per-second rate of increase over a 1-minute sliding window. This smooths out short spikes and accounts for the counter always increasing.
+    - `avg(...)` — averages the idle rate across all CPU cores, giving a single value that represents the machine as a whole.
+    - `* 100` — converts the fraction (0–1) to a percentage (0–100).
+    - `100 - (...)` — flips idle percentage to usage percentage. If 20% of CPU time is idle, then 80% is in use.
+
+    <Note>
+      Prometheus scrapes Node Exporter every 15 seconds in this project. The `rate()` window must be significantly larger than the scrape interval, so `[1m]` gives Prometheus at least 4 data points to work with. Using `[15s]` or smaller would produce unreliable results.
+    </Note>
+  </Tab>
+  <Tab title="Memory">
+    ```promql
+    (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024 / 1024
+    ```
+
+    This query returns the amount of RAM currently in use, expressed in gigabytes. Here is what each part does:
+
+    - `node_memory_MemTotal_bytes` — the total physical RAM installed on the system, reported in bytes by Node Exporter.
+    - `node_memory_MemAvailable_bytes` — the amount of memory currently available for new processes. This is not the same as free memory; it also accounts for memory that can be reclaimed from caches.
+    - `(MemTotal - MemAvailable)` — the difference is the memory actively in use.
+    - `/ 1024 / 1024 / 1024` — converts bytes to gigabytes (bytes → kibibytes → mebibytes → gibibytes).
+  </Tab>
+</Tabs>
+
+## Exploring available metrics
+
+To see all metrics that Prometheus is collecting, open the Prometheus UI at `http://localhost:9090` and click the metrics explorer icon next to the query input. You can also browse to `http://localhost:9090/metrics` on the Node Exporter directly to see the raw output.
+
+To list all metrics exposed by Node Exporter, filter by job in the Prometheus UI:
+
+```promql
+{job="node-exporter"}
+```
+
+This returns every metric that Prometheus has scraped from the `node-exporter` target.
+
+## Filtering with labels
+
+Labels are key-value pairs attached to every metric. You can filter any query by adding a label selector inside `{}`.
+
+To target a specific job:
+
+```promql
+node_cpu_seconds_total{job="node-exporter"}
+```
+
+To target a specific mode:
+
+```promql
+node_cpu_seconds_total{mode="idle"}
+```
+
+You can combine multiple label selectors in the same `{}`:
+
+```promql
+node_cpu_seconds_total{job="node-exporter", mode="idle"}
+```
+
+## Adding a PromQL panel to a Grafana dashboard
+
+To visualize a PromQL query as a panel on a Grafana dashboard:
+
+1. Open Grafana at `http://localhost:3000` and navigate to your dashboard.
+2. Click **Add** → **Visualization**.
+3. In the **Data source** dropdown, select **Prometheus**.
+4. Enter your PromQL query in the query field, for example:
+   ```promql
+   100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)
+   ```
+5. Choose a visualization type (Time series, Gauge, Stat, etc.) from the panel type selector.
+6. Click **Apply** to save the panel to the dashboard.

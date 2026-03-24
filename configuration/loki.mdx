@@ -1,0 +1,120 @@
+---
+title: "Loki configuration"
+description: "Configure log storage, schema, and server settings for Loki."
+---
+
+Loki is the log aggregation backend in this stack. It receives log streams from Promtail and stores them on the local filesystem. This page explains each field in `loki-config.yml` and the matching Docker Compose service.
+
+## Full configuration
+
+```yaml
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+```
+
+## Configuration fields
+
+<ParamField path="auth_enabled" type="boolean" default="false">
+  Controls whether Loki requires an `X-Scope-OrgID` header on every request to identify the tenant. When set to `false`, Loki operates in single-tenant mode and accepts requests without authentication headers.
+</ParamField>
+
+<Warning>
+  `auth_enabled: false` is suitable for local development only. In a production or shared environment you should enable multi-tenancy and place an authenticating proxy in front of Loki.
+</Warning>
+
+<ParamField path="server.http_listen_port" type="number" default="3100">
+  The port Loki's HTTP server listens on. Promtail pushes logs to this port, and Grafana queries it for log data.
+</ParamField>
+
+<ParamField path="common.path_prefix" type="string" default="/loki">
+  The root directory under which Loki stores all data. The `chunks_directory` and `rules_directory` paths below are resolved relative to this prefix.
+</ParamField>
+
+<ParamField path="common.storage.filesystem.chunks_directory" type="string" default="/loki/chunks">
+  Where Loki writes compressed log chunks on the filesystem.
+</ParamField>
+
+<ParamField path="common.storage.filesystem.rules_directory" type="string" default="/loki/rules">
+  Where Loki stores alerting and recording rules.
+</ParamField>
+
+<ParamField path="common.replication_factor" type="number" default="1">
+  The number of replicas for each log chunk. A value of `1` means no replication, which is appropriate for a single-node local setup.
+</ParamField>
+
+<ParamField path="common.ring.instance_addr" type="string" default="127.0.0.1">
+  The address this Loki instance advertises to the ring. Set to the loopback address for single-node deployments.
+</ParamField>
+
+<ParamField path="common.ring.kvstore.store" type="string" default="inmemory">
+  The key-value store used by the ring for membership coordination. `inmemory` keeps all state in the process, which is only viable for a single Loki instance.
+</ParamField>
+
+## Schema configuration
+
+<ParamField path="schema_config.configs[].from" type="string" default="2020-10-24">
+  The date from which this schema version applies. Loki uses the schema that was active when a chunk was written to read it back correctly.
+</ParamField>
+
+<ParamField path="schema_config.configs[].store" type="string" default="tsdb">
+  The index store type. `tsdb` is the recommended store for Loki v2.8 and later.
+</ParamField>
+
+<ParamField path="schema_config.configs[].object_store" type="string" default="filesystem">
+  Where Loki stores chunk data. `filesystem` writes directly to local disk, which is appropriate for local development.
+</ParamField>
+
+<ParamField path="schema_config.configs[].schema" type="string" default="v13">
+  The schema version used to encode index entries. `v13` is the current recommended version.
+</ParamField>
+
+<ParamField path="schema_config.configs[].index.prefix" type="string" default="index_">
+  A string prepended to all index table names.
+</ParamField>
+
+<ParamField path="schema_config.configs[].index.period" type="string" default="24h">
+  How often Loki rotates index tables. A period of `24h` creates one table per day.
+</ParamField>
+
+## Docker Compose service
+
+The `loki` service in `docker-compose.yml` is defined as follows:
+
+```yaml
+loki:
+  image: grafana/loki:latest
+  container_name: loki
+  ports:
+    - "3100:3100"
+  volumes:
+    - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+```
+
+- **image** — uses the official `grafana/loki:latest` image.
+- **ports** — maps host port `3100` to container port `3100`, allowing Grafana (and your browser) to reach Loki at `http://localhost:3100`.
+- **volumes** — mounts your local `loki/loki-config.yml` into the container at `/etc/loki/local-config.yaml`, the path Loki reads by default on startup.

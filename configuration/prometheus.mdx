@@ -1,0 +1,92 @@
+---
+title: "Prometheus configuration"
+description: "Configure metrics scraping targets and intervals for Prometheus."
+---
+
+Prometheus collects metrics by polling targets at a fixed interval. This page explains the `prometheus.yml` configuration used in this stack and how to extend it.
+
+## Full configuration
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+```
+
+## Configuration fields
+
+<ParamField path="global.scrape_interval" type="string" default="15s">
+  How often Prometheus polls each target for metrics. A value of `15s` means Prometheus sends an HTTP request to every configured target every 15 seconds and stores the returned time-series data.
+</ParamField>
+
+<ParamField path="scrape_configs" type="object[]" required>
+  A list of scrape jobs. Each entry defines a named job and the targets Prometheus should poll.
+</ParamField>
+
+<ParamField path="scrape_configs[].job_name" type="string" required>
+  A unique name for the scrape job. Prometheus attaches this value as the `job` label on every metric it collects from the targets in this job. In this stack the job is named `node-exporter`.
+</ParamField>
+
+<ParamField path="scrape_configs[].static_configs" type="object[]" required>
+  A list of static target groups. Each group specifies one or more host:port addresses that Prometheus will scrape.
+</ParamField>
+
+<ParamField path="scrape_configs[].static_configs[].targets" type="string[]" required>
+  The addresses Prometheus scrapes. The single target here is `node-exporter:9100`.
+
+  The hostname `node-exporter` resolves because Docker Compose creates an internal DNS entry for every service using its service name. Prometheus and node-exporter share the same Docker network, so `node-exporter:9100` reaches the exporter without exposing anything on the host network.
+</ParamField>
+
+## Docker Compose service
+
+The `prometheus` service in `docker-compose.yml` is defined as follows:
+
+```yaml
+prometheus:
+  image: prom/prometheus:latest
+  container_name: prometheus
+  ports:
+    - "9090:9090"
+  volumes:
+    - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+```
+
+- **image** — uses the official `prom/prometheus:latest` image.
+- **ports** — maps host port `9090` to container port `9090`, making the Prometheus web UI available at `http://localhost:9090`.
+- **volumes** — mounts your local `prometheus/prometheus.yml` into the container at the path Prometheus reads on startup. Editing the local file and restarting the container applies the new configuration.
+
+## Prometheus web UI
+
+Once the stack is running, open `http://localhost:9090` in your browser. From the UI you can:
+
+- Run PromQL queries against collected metrics.
+- Check the status of configured scrape targets under **Status → Targets**.
+- Inspect loaded configuration under **Status → Configuration**.
+
+## Adding scrape targets
+
+To scrape an additional service, append a new entry under `scrape_configs`. For example, to also scrape a service called `my-app` that exposes metrics on port `8080`:
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'my-app'
+    static_configs:
+      - targets: ['my-app:8080']
+```
+
+After editing `prometheus.yml`, restart the Prometheus container for the change to take effect:
+
+```bash
+docker compose restart prometheus
+```

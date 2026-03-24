@@ -1,0 +1,64 @@
+---
+title: "Introduction"
+description: "A local observability stack using Prometheus, Loki, and Grafana to monitor system metrics and logs."
+---
+
+## What is this project?
+
+This project sets up a complete local observability stack using the **PLG** pattern — **P**rometheus, **L**oki, and **G**rafana. It was built as part of a DevOps learning journey to understand the difference between metrics and logs, and how to correlate them in a unified dashboard.
+
+All five services run locally in Docker containers with a single command.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/setup/quickstart">
+    Get the full stack running in under 5 minutes
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand how all five services connect
+  </Card>
+  <Card title="PromQL queries" icon="chart-line" href="/querying/promql">
+    Query CPU, RAM, and disk metrics with Prometheus
+  </Card>
+  <Card title="LogQL queries" icon="file-lines" href="/querying/logql">
+    Filter and search system logs with Loki
+  </Card>
+</CardGroup>
+
+## The PLG stack
+
+| Service | Role | Port |
+|---|---|---|
+| **Prometheus** | Scrapes and stores metrics | `9090` |
+| **Node Exporter** | Exposes system metrics (CPU, RAM, disk) | `9100` |
+| **Loki** | Stores and indexes log streams | `3100` |
+| **Promtail** | Collects logs and pushes to Loki | `9080` |
+| **Grafana** | Unified dashboard for metrics and logs | `3000` |
+
+## Key concepts
+
+<AccordionGroup>
+  <Accordion title="Metrics vs. logs">
+    **Metrics** answer *what is happening* — numbers over time (CPU at 80%, 500 requests/sec). Prometheus collects these by scraping HTTP endpoints at a regular interval.
+
+    **Logs** answer *why it is happening* — timestamped text events from running processes. Loki stores these as indexed streams pushed by Promtail.
+
+    Grafana lets you view both side by side, so you can correlate a CPU spike on a graph with the error that caused it in the logs.
+  </Accordion>
+  <Accordion title="Pull vs. push model">
+    Prometheus uses a **pull** model — it scrapes targets on a schedule (`scrape_interval: 15s`). Each target must expose a `/metrics` endpoint.
+
+    Loki uses a **push** model — Promtail watches log files and pushes new entries to Loki's HTTP API.
+  </Accordion>
+  <Accordion title="Local-only — no cloud required">
+    Everything runs in Docker on your local machine. There are no external services, API keys, or cloud accounts required. This makes it ideal for learning and experimentation.
+  </Accordion>
+</AccordionGroup>
+
+## Prerequisites
+
+- WSL (Ubuntu) or any Linux environment
+- Docker and Docker Compose installed
+
+<Tip>
+  New to the stack? Start with the [Quickstart](/setup/quickstart) to get everything running, then explore the [Architecture](/architecture) page to understand how the pieces fit together.
+</Tip>

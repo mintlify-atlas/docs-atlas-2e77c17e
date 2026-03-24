@@ -1,0 +1,134 @@
+---
+title: "Managing the stack"
+description: "Start, stop, inspect, and manage the PLG observability stack with Docker Compose."
+---
+
+## Starting the stack
+
+<Steps>
+  <Step title="Start all services in detached mode">
+    Run the following command from the root of the project (where `docker-compose.yml` lives):
+
+    ```bash
+    docker compose up -d
+    ```
+
+    Docker Compose pulls any missing images and starts five containers: `prometheus`, `node-exporter`, `loki`, `promtail`, and `grafana`.
+  </Step>
+
+  <Step title="Verify all containers are running">
+    ```bash
+    docker compose ps
+    ```
+
+    You should see all five containers with a status of `Up`. If any container shows `Exited` or is missing entirely, check its logs before proceeding (see [Viewing service logs](#viewing-service-logs) below).
+  </Step>
+
+  <Step title="Open Grafana">
+    Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+
+    Log in with the default credentials:
+    - **Username:** `admin`
+    - **Password:** `admin`
+  </Step>
+</Steps>
+
+## Service endpoints
+
+Once the stack is running, each service is reachable on your host machine at the following addresses:
+
+| Service | Host URL | Container port |
+|---|---|---|
+| Grafana | http://localhost:3000 | `3000` |
+| Prometheus UI | http://localhost:9090 | `9090` |
+| Node Exporter metrics | http://localhost:9100/metrics | `9100` |
+| Loki API | http://localhost:3100 | `3100` |
+| Promtail | http://localhost:9080 | `9080` |
+
+<Note>
+  When configuring datasources inside Grafana, use the container name as the hostname — for example, `http://prometheus:9090` and `http://loki:3100` — not `localhost`. Grafana resolves these names over the internal Docker network.
+</Note>
+
+## Viewing service logs
+
+Follow the live log output for any individual service by passing its container name to `docker compose logs`:
+
+```bash
+# Follow Prometheus logs
+docker compose logs -f prometheus
+
+# Follow Loki logs
+docker compose logs -f loki
+
+# Follow Promtail logs
+docker compose logs -f promtail
+
+# Follow Node Exporter logs
+docker compose logs -f node-exporter
+
+# Follow Grafana logs
+docker compose logs -f grafana
+```
+
+Press `Ctrl+C` to stop following. Drop the `-f` flag to print existing logs without tailing.
+
+## Stopping the stack
+
+To stop all running containers without removing their configuration:
+
+```bash
+docker compose down
+```
+
+This stops and removes the containers but leaves your config files and any local volumes intact.
+
+## Restarting a single service
+
+If you need to bounce one service — for example, after editing `promtail-config.yml` — restart it without touching the rest of the stack:
+
+```bash
+docker compose restart promtail
+```
+
+You can substitute any service name: `prometheus`, `loki`, `node-exporter`, or `grafana`.
+
+## Rebuilding after config changes
+
+`docker compose restart` reuses the existing container. If you need Docker Compose to re-read a volume-mounted config file and apply it from scratch, force a full container recreation instead:
+
+```bash
+docker compose up -d --force-recreate promtail
+```
+
+This stops the `promtail` container, removes it, and starts a fresh one with the updated config — without affecting the other four services.
+
+## Checking port availability
+
+If a container fails to start, the host port it needs may already be in use. The ports each service binds on your host are:
+
+| Service | Host port |
+|---|---|
+| Prometheus | `9090` |
+| Node Exporter | `9100` |
+| Loki | `3100` |
+| Grafana | `3000` |
+
+<Note>
+  Promtail does not expose a host port in `docker-compose.yml`. Its HTTP server listens on port `9080` inside the container only.
+</Note>
+
+To check whether a port is already occupied:
+
+```bash
+sudo ss -tlnp | grep 9090
+```
+
+If the port is in use by another process, either stop that process or change the host-side port mapping in `docker-compose.yml`. For example, to move Prometheus to host port `19090`:
+
+```yaml
+prometheus:
+  ports:
+    - "19090:9090"
+```
+
+Then run `docker compose up -d --force-recreate prometheus` to apply the change.

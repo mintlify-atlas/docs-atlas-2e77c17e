@@ -1,0 +1,87 @@
+---
+title: "Prerequisites"
+description: "Everything you need before starting the PLG observability stack."
+---
+
+Before you start the PLG stack, make sure your machine meets the requirements below. The stack runs five containers and requires access to system logs, so a few things must be in place first.
+
+## Required software
+
+<Check>**WSL (Ubuntu)** — the stack is designed to run inside Windows Subsystem for Linux using an Ubuntu distribution. All commands in this documentation assume a WSL/Ubuntu shell.</Check>
+
+<Check>**Docker** — Docker Engine must be installed and running inside your WSL environment.</Check>
+
+<Check>**Docker Compose** — Docker Compose V2 (the `docker compose` plugin, not the standalone `docker-compose` binary) is required.</Check>
+
+## Verify your installation
+
+Run the following commands to confirm both tools are available and respond correctly before continuing.
+
+<Steps>
+  <Step title="Check Docker">
+    ```bash
+    docker --version
+    ```
+
+    You should see output similar to:
+
+    ```
+    Docker version 24.0.5, build ced0996
+    ```
+  </Step>
+
+  <Step title="Check Docker Compose">
+    ```bash
+    docker compose version
+    ```
+
+    You should see output similar to:
+
+    ```
+    Docker Compose version v2.20.2
+    ```
+
+    <Warning>
+      If this command fails or shows `docker-compose` (with a hyphen) as not found, you are likely using the legacy standalone binary. This project requires the Compose V2 plugin. Install it via Docker Desktop or by following the [official Docker Compose installation guide](https://docs.docker.com/compose/install/).
+    </Warning>
+  </Step>
+
+  <Step title="Confirm Docker is running">
+    ```bash
+    docker info
+    ```
+
+    If Docker is not running, this command will return an error. Start the Docker daemon before proceeding.
+  </Step>
+</Steps>
+
+## Recommended system resources
+
+The stack starts five containers simultaneously. The table below lists the minimum recommended resources to run the stack without performance issues.
+
+| Resource | Recommended minimum |
+| --- | --- |
+| CPU | 2 cores |
+| RAM | 4 GB available |
+| Disk | 2 GB free |
+
+<Warning>
+  Running the stack on a machine with less than 4 GB of available RAM may cause containers — particularly Loki or Grafana — to restart unexpectedly under load.
+</Warning>
+
+## Host log access for Promtail
+
+Promtail collects logs from `/var/log` on the host and forwards them to Loki. The `docker-compose.yml` mounts this directory into the Promtail container in read-only mode:
+
+```yaml
+volumes:
+  - /var/log:/var/log:ro
+```
+
+<Warning>
+  Your WSL user must be able to read files in `/var/log`. If Promtail starts but no logs appear in Grafana, check that `/var/log/*.log` files are readable by your current user. You can verify this with:
+
+  ```bash
+  ls -l /var/log/*.log
+  ```
+</Warning>

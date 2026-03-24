@@ -1,0 +1,96 @@
+---
+title: "Grafana configuration"
+description: "Configure Grafana datasources, dashboards, and authentication."
+---
+
+Grafana is the visualization layer of this stack. It connects to Prometheus for metrics and Loki for logs, and lets you build dashboards and run ad-hoc queries from a single UI.
+
+## Docker Compose service
+
+```yaml
+grafana:
+  image: grafana/grafana:latest
+  container_name: grafana
+  ports:
+    - "3000:3000"
+  environment:
+    - GF_SECURITY_ADMIN_PASSWORD=admin
+```
+
+- **image** — uses the official `grafana/grafana:latest` image.
+- **ports** — maps host port `3000` to container port `3000`, making the Grafana UI available at `http://localhost:3000`.
+- **environment** — sets the admin password via the `GF_SECURITY_ADMIN_PASSWORD` environment variable.
+
+## Default login
+
+The default credentials for this stack are:
+
+| Field    | Value   |
+| -------- | ------- |
+| Username | `admin` |
+| Password | `admin` |
+
+<Warning>
+  Change the default admin password before exposing Grafana on a non-loopback interface. Update the `GF_SECURITY_ADMIN_PASSWORD` value in `docker-compose.yml` and restart the container, or change the password through **Profile → Change password** after logging in.
+</Warning>
+
+## Changing the admin password
+
+To set a different password, update the environment variable in `docker-compose.yml`:
+
+```yaml
+environment:
+  - GF_SECURITY_ADMIN_PASSWORD=your-new-password
+```
+
+Then restart the Grafana container:
+
+```bash
+docker compose restart grafana
+```
+
+## Adding datasources
+
+Grafana must be connected to Prometheus and Loki before you can query data or build dashboards. Use the following internal URLs — both use Docker's internal DNS, so the connections work entirely inside the Docker network:
+
+| Datasource | URL                      |
+| ---------- | ------------------------ |
+| Prometheus | `http://prometheus:9090` |
+| Loki       | `http://loki:3100`       |
+
+<Steps>
+  <Step title="Open the datasource settings">
+    Log in to Grafana at `http://localhost:3000`. In the left sidebar, go to **Connections → Data sources**.
+  </Step>
+  <Step title="Add a new data source">
+    Click **Add new data source** and select the datasource type (for example, **Prometheus**).
+  </Step>
+  <Step title="Enter the connection URL">
+    In the **URL** field, enter the internal address for the datasource. Use `http://prometheus:9090` for Prometheus or `http://loki:3100` for Loki.
+  </Step>
+  <Step title="Save and test">
+    Click **Save & test**. Grafana sends a probe request to the datasource and confirms the connection is working.
+  </Step>
+  <Step title="Repeat for the second datasource">
+    Go back to **Connections → Data sources → Add new data source** and repeat the steps for Loki.
+  </Step>
+</Steps>
+
+## Building a dashboard
+
+Once your datasources are configured you can create a dashboard to visualize metrics and logs:
+
+<Steps>
+  <Step title="Create a new dashboard">
+    In the left sidebar, click the **+** icon and select **New dashboard**.
+  </Step>
+  <Step title="Add a visualization">
+    Click **Add visualization** and choose a datasource — select **Prometheus** to query metrics or **Loki** to query logs.
+  </Step>
+  <Step title="Write a query">
+    Enter a PromQL expression (for Prometheus) or a LogQL expression (for Loki) in the query editor. For example, use `{job="varlogs"}` to display all logs collected by Promtail.
+  </Step>
+  <Step title="Save the dashboard">
+    Click **Save dashboard**, give it a name, and click **Save**.
+  </Step>
+</Steps>

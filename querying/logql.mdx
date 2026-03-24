@@ -1,0 +1,97 @@
+---
+title: "LogQL — log queries"
+description: "Filter and search system logs collected by Promtail using LogQL."
+---
+
+LogQL (Loki Query Language) is the query language for Loki. You use it to select log streams and filter individual log lines. Unlike PromQL, LogQL works with unstructured text rather than numeric time-series data.
+
+You run LogQL queries in **Grafana Explore**: open `http://localhost:3000`, click **Explore** in the left sidebar, and select **Loki** as the datasource.
+
+## Stream selectors
+
+Every LogQL query starts with a stream selector — a set of label matchers inside `{}` that identify which log stream you want to read.
+
+```logql
+{job="varlogs"}
+```
+
+The `job="varlogs"` label comes from the Promtail configuration (`promtail/promtail-config.yml`). Promtail is configured to collect files matching `/var/log/*.log` and attach the label `job: varlogs` to every log line it ships to Loki. This label is how Loki knows which logs belong together, and it is the only label you need to query all system logs in this project.
+
+## Example queries
+
+The three queries below come directly from the project and cover the most common use cases.
+
+**Stream all system logs**
+
+```logql
+{job="varlogs"}
+```
+
+Returns every log line collected from `/var/log/*.log`. Use this as a starting point before applying filters.
+
+**Filter to lines containing "error"**
+
+```logql
+{job="varlogs"} |= "error"
+```
+
+The `|=` operator keeps only log lines that contain the given string. This is useful for quickly isolating failures or exceptions from a noisy log stream.
+
+<Tip>
+  `|=` is case-sensitive. A line containing `Error` or `ERROR` will not match `|= "error"`. If you need case-insensitive matching, use a regex filter: `|~ "(?i)error"`.
+</Tip>
+
+**Exclude noisy lines**
+
+```logql
+{job="varlogs"} != "audit"
+```
+
+The `!=` operator drops any log line that contains the given string. This is useful for removing repetitive or low-signal entries that clutter the output.
+
+## Combining filters
+
+You can chain multiple filter operators in a single query. Filters are applied left to right, so each one narrows the stream further.
+
+To show only error lines while excluding audit noise:
+
+```logql
+{job="varlogs"} |= "error" != "audit"
+```
+
+This query first selects the `varlogs` stream, keeps only lines containing `"error"`, then removes any of those lines that also contain `"audit"`.
+
+## How to run a LogQL query in Grafana Explore
+
+<Steps>
+  <Step title="Open Grafana Explore">
+    Navigate to `http://localhost:3000` and click **Explore** in the left sidebar.
+  </Step>
+  <Step title="Select the Loki datasource">
+    Use the datasource dropdown at the top of the page to select **Loki**. If Loki is not listed, add it first under **Connections → Data sources**.
+  </Step>
+  <Step title="Enter your query">
+    Type your LogQL query in the query field. Start with the stream selector:
+    ```logql
+    {job="varlogs"}
+    ```
+  </Step>
+  <Step title="Add filters">
+    Append filter operators to narrow the results. For example, to see only error lines:
+    ```logql
+    {job="varlogs"} |= "error"
+    ```
+  </Step>
+  <Step title="Run the query">
+    Click **Run query** or press `Shift+Enter`. Loki returns matching log lines in the results panel below, with a log volume histogram at the top.
+  </Step>
+</Steps>
+
+## How Promtail labels determine what you can query
+
+The labels available in LogQL are set by Promtail when it collects logs. In `promtail/promtail-config.yml`, the scrape configuration targets `/var/log/*.log` and attaches the label `job: varlogs`. This means:
+
+- `{job="varlogs"}` is the correct stream selector for all system logs in this project.
+- There are no other job labels unless you add more scrape targets to the Promtail config.
+
+If you add a new log source to Promtail with a different `job` label, you query it the same way — just replace `varlogs` with whatever label you configured.

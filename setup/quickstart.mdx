@@ -1,0 +1,119 @@
+---
+title: "Quickstart"
+description: "Get the full PLG observability stack running locally in under 5 minutes."
+---
+
+This guide walks you through starting the stack, verifying all five containers, connecting Grafana to Prometheus and Loki, and cleaning up when you're done.
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/your-org/monitoring-lab.git
+    cd monitoring-lab
+    ```
+  </Step>
+
+  <Step title="Start the stack">
+    Start all five containers in detached mode:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    Docker pulls any missing images on the first run, so this may take a minute or two depending on your connection speed.
+  </Step>
+
+  <Step title="Verify all containers are running">
+    ```bash
+    docker compose ps
+    ```
+
+    You should see five containers with a `running` status:
+
+    | Container | Role |
+    | --- | --- |
+    | `prometheus` | Metrics collection and storage |
+    | `node-exporter` | Exposes system metrics (CPU, RAM, disk) |
+    | `loki` | Log storage |
+    | `promtail` | Log collection and forwarding to Loki |
+    | `grafana` | Unified dashboard for metrics and logs |
+
+    If any container is not running, check its logs with `docker compose logs <container-name>`.
+  </Step>
+
+  <Step title="Open Grafana">
+    Go to [http://localhost:3000](http://localhost:3000) in your browser.
+
+    <Note>
+      The default credentials are **admin / admin**. Grafana will prompt you to change the password after your first login. The password is also set via the `GF_SECURITY_ADMIN_PASSWORD` environment variable in `docker-compose.yml`.
+    </Note>
+  </Step>
+
+  <Step title="Add the Prometheus datasource">
+    1. In Grafana, go to **Connections → Data sources → Add new data source**.
+    2. Select **Prometheus**.
+    3. Set the URL field to:
+
+    ```
+    http://prometheus:9090
+    ```
+
+    4. Click **Save & test**. Grafana should confirm that the datasource is working.
+  </Step>
+
+  <Step title="Add the Loki datasource">
+    1. Go to **Connections → Data sources → Add new data source**.
+    2. Select **Loki**.
+    3. Set the URL field to:
+
+    ```
+    http://loki:3100
+    ```
+
+    4. Click **Save & test**.
+
+    Both datasource URLs use Docker's internal service names, which resolve correctly because all containers share the same Compose network.
+
+    | Datasource | URL |
+    | --- | --- |
+    | Prometheus | `http://prometheus:9090` |
+    | Loki | `http://loki:3100` |
+  </Step>
+
+  <Step title="Create or import a dashboard">
+    With both datasources connected, you can build a dashboard or import an existing one:
+
+    - **Create a dashboard**: go to **Dashboards → New → New dashboard** and add panels using PromQL for metrics and LogQL for logs.
+    - **Import a dashboard**: go to **Dashboards → New → Import** and enter a Grafana dashboard ID from [grafana.com/grafana/dashboards](https://grafana.com/grafana/dashboards) (for example, ID `1860` for the Node Exporter Full dashboard).
+
+    Example PromQL queries to get started:
+
+    ```promql
+    # CPU usage %
+    100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)
+
+    # RAM used (GB)
+    (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024 / 1024
+    ```
+
+    Example LogQL queries:
+
+    ```logql
+    # All system logs
+    {job="varlogs"}
+
+    # Filter errors only
+    {job="varlogs"} |= "error"
+    ```
+  </Step>
+
+  <Step title="Clean up">
+    When you're done, stop and remove all containers:
+
+    ```bash
+    docker compose down
+    ```
+
+    This stops all running containers and removes the networks created by Compose. Your configuration files are not affected.
+  </Step>
+</Steps>

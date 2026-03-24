@@ -1,0 +1,118 @@
+---
+title: "Promtail configuration"
+description: "Configure log collection paths, labels, and Loki push target for Promtail."
+---
+
+Promtail is the log shipping agent in this stack. It tails log files on the host and forwards them to Loki. This page explains each field in `promtail-config.yml`, how labels work, and how to extend the configuration to collect additional log paths.
+
+## Full configuration
+
+```yaml
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          __path__: /var/log/*.log
+```
+
+## Configuration fields
+
+<ParamField path="server.http_listen_port" type="number" default="9080">
+  The port Promtail's own HTTP server listens on. You can use this endpoint to check Promtail's health and inspect its targets at `http://localhost:9080`.
+</ParamField>
+
+<ParamField path="positions.filename" type="string" default="/tmp/positions.yaml">
+  Path to the file where Promtail persists its read offsets for each tailed log file.
+</ParamField>
+
+<Tip>
+  The positions file lets Promtail resume from where it left off after a restart, so it does not re-send logs it has already pushed to Loki. If you delete this file, Promtail re-reads from the beginning of each log file.
+</Tip>
+
+<ParamField path="clients[].url" type="string" required>
+  The Loki endpoint Promtail pushes log batches to. The URL `http://loki:3100/loki/api/v1/push` uses the Docker internal DNS name `loki`, which resolves to the Loki container because both services share the same Docker Compose network.
+</ParamField>
+
+<ParamField path="scrape_configs[].job_name" type="string" required>
+  A unique name for this scrape job. The value `system` is used here to describe logs from the host operating system.
+</ParamField>
+
+<ParamField path="scrape_configs[].static_configs[].targets" type="string[]" required>
+  The scrape target. For file-based log collection this is always `localhost`, because Promtail reads files on the same filesystem it runs on (via the Docker volume mount).
+</ParamField>
+
+<ParamField path="scrape_configs[].static_configs[].labels.job" type="string" required>
+  A label attached to every log line collected by this job. The value `varlogs` identifies these logs in Loki. You query them in Grafana with `{job="varlogs"}`.
+</ParamField>
+
+<ParamField path="scrape_configs[].static_configs[].labels.__path__" type="string" required>
+  A glob pattern that tells Promtail which files to tail. The pattern `/var/log/*.log` matches all `.log` files directly inside `/var/log`. Promtail automatically discovers new files that match the pattern without a restart.
+</ParamField>
+
+## How labels work in Loki
+
+Every log line Promtail pushes to Loki carries the labels defined in `scrape_configs`. Labels are the primary way to filter and query logs in Loki's query language (LogQL).
+
+With the configuration above, all logs from `/var/log/*.log` are tagged with `job="varlogs"`. In Grafana's Explore view you can retrieve them with:
+
+```
+{job="varlogs"}
+```
+
+You can filter further using pipe expressions, for example to show only lines that contain the word `error`:
+
+```
+{job="varlogs"} |= "error"
+```
+
+## Docker Compose volume mount
+
+The `promtail` service in `docker-compose.yml` mounts the host log directory into the container:
+
+```yaml
+promtail:
+  image: grafana/promtail:latest
+  container_name: promtail
+  volumes:
+    - ./promtail/promtail-config.yml:/etc/promtail/config.yml
+    - /var/log:/var/log:ro
+```
+
+The mount `/var/log:/var/log:ro` gives Promtail read-only access to the host's `/var/log` directory. The `:ro` flag prevents Promtail from modifying any log files.
+
+## Adding more log paths
+
+To collect logs from an additional directory, add a new entry under `scrape_configs` with a different `job` label and `__path__` value:
+
+```yaml
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          __path__: /var/log/*.log
+
+  - job_name: app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: applogs
+          __path__: /var/log/myapp/*.log
+```
+
+If the new path is outside `/var/log`, you also need to add a matching volume mount in `docker-compose.yml` so the directory is accessible inside the Promtail container.
